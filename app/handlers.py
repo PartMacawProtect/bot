@@ -17,18 +17,20 @@ async def business_message_handler(message: Message):
         business_conn = await bot.get_business_connection(message.business_connection_id)
 
         # 2. Проверяем рабочие часы.
-        # Если часы не настроены в Telegram вообще ИЛИ если check_opening_hours вернула False (сейчас рабочее время)
-        if not business_conn.opening_hours or not check_opening_hours(business_conn.opening_hours):
-            print("⏱ Сейчас рабочее время (или часы работы не настроены в ТГ). Бот молчит.")
-            return  # Выходим из функции, бот ничего не отвечает
+        # Если часы настроены — проверяем, рабочее ли сейчас время.
+        # Если часы НЕ настроены — бот отвечает всегда.
+        opening_hours = getattr(business_conn, "opening_hours", None)
+        if opening_hours:
+            if not check_opening_hours(opening_hours):
+                print("⏱ Сейчас рабочее время. Бот молчит.")
+                return  # Выходим из функции, бот ничего не отвечает
 
     except Exception as e:
         print(f"⚠️ Ошибка при проверке рабочих часов: {e}")
-        # Если не удалось проверить время, на всякий случай выходим, чтобы не ответить посреди рабочего дня
-        return
+        # Если не удалось проверить время — продолжаем и отвечаем, как при ненастроенных часах
 
-        # --- ВСЁ ЧТО НИЖЕ — СРАБОТАЕТ ТОЛЬКО В НЕРАБОЧЕЕ ВРЕМЯ ---
-    print(f"📥 Нерабочее время! Бот поймал сообщение от @{message.from_user.username}: {message.text}")
+        # --- ВСЁ ЧТО НИЖЕ — СРАБОТАЕТ В НЕРАБОЧЕЕ ВРЕМЯ ИЛИ ЕСЛИ ЧАСЫ НЕ НАСТРОЕНЫ ---
+    print(f"📥 Бот поймал сообщение от @{message.from_user.username}: {message.text}")
 
     try:
         print("🤖 Отправляем запрос в Groq API...")
