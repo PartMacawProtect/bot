@@ -17,14 +17,16 @@ async def business_message_handler(message: Message):
         business_conn = await bot.get_business_connection(message.business_connection_id)
 
         # 2. Проверяем рабочие часы.
-        # Если часы не настроены в Telegram вообще ИЛИ если check_opening_hours вернула False (сейчас рабочее время)
-        if not business_conn.opening_hours or not check_opening_hours(business_conn.opening_hours):
-            print("⏱ Сейчас рабочее время (или часы работы не настроены в ТГ). Бот молчит.")
+        opening_hours = getattr(business_conn, "opening_hours", None)
+        # Если часы настроены И check_opening_hours вернула False (сейчас рабочее время) — молчим
+        if opening_hours is not None and not check_opening_hours(opening_hours):
+            print("⏱ Сейчас рабочее время. Бот молчит.")
             return  # Выходим из функции, бот ничего не отвечает
+        # Если opening_hours отсутствует или None — продолжаем и отвечаем на сообщение
 
     except Exception as e:
-        print(f"⚠️ Ошибка при проверке рабочих часов: {e}")
-        # Если не удалось проверить время, на всякий случай выходим, чтобы не ответить посреди рабочего дня
+        print(f"⚠️ Ошибка при получении бизнес-подключения: {e}")
+        # Если не удалось получить данные подключения, выходим во избежание ответа в рабочее время
         return
 
         # --- ВСЁ ЧТО НИЖЕ — СРАБОТАЕТ ТОЛЬКО В НЕРАБОЧЕЕ ВРЕМЯ ---
