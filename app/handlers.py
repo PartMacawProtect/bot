@@ -13,8 +13,12 @@ client = AsyncGroq(api_key=secrets.groq_api_key)
 @router.business_message()
 async def business_message_handler(message: Message):
     try:
-        # 1. Запрашиваем актуальную информацию о твоем бизнес-аккаунте
-        business_conn = await bot.get_business_connection(message.business_connection_id)
+        # Проверяем, что ID бизнес-соединения вообще существует в сообщении
+        if not message.business_connection_id:
+            return
+
+        # 1. Запрашиваем актуальную информацию о бизнес-соединении (передаем строго ID соединения)
+        business_conn = await bot.get_business_connection(business_connection_id=message.business_connection_id)
 
         # 2. Проверяем рабочие часы.
         # Если часы не настроены в Telegram вообще ИЛИ если check_opening_hours вернула False (сейчас рабочее время)
@@ -24,11 +28,14 @@ async def business_message_handler(message: Message):
 
     except Exception as e:
         print(f"⚠️ Ошибка при проверке рабочих часов: {e}")
-        # Если не удалось проверить время, на всякий случай выходим, чтобы не ответить посреди рабочего дня
+        # Если не удалось проверить время, на всякий случай выходим, чтобы случайно не ответить в рабочее время
         return
 
-        # --- ВСЁ ЧТО НИЖЕ — СРАБОТАЕТ ТОЛЬКО В НЕРАБОЧЕЕ ВРЕМЯ ---
-    print(f"📥 Нерабочее время! Бот поймал сообщение от @{message.from_user.username}: {message.text}")
+    # --- ВСЁ ЧТО НИЖЕ — СРАБОТАЕТ ТОЛЬКО В НЕРАБОЧЕЕ ВРЕМЯ ---
+    
+    # Красиво оформляем имя пользователя для логов, если у него нет @username
+    user_info = f"@{message.from_user.username}" if message.from_user.username else f"ID {message.from_user.id}"
+    print(f"📥 Нерабочее время! Бот поймал сообщение от {user_info}: {message.text}")
 
     try:
         print("🤖 Отправляем запрос в Groq API...")
@@ -42,12 +49,13 @@ async def business_message_handler(message: Message):
         answer = response.choices[0].message.content
         print(f"🎯 Ответ от Groq получен: {answer}")
 
+        # Отправляем ответ в рамках того же бизнес-соединения
         await bot.send_message(
             chat_id=message.chat.id,
             text=answer,
             business_connection_id=message.business_connection_id
         )
-        print("📤 Ответ успешно отправлен другу!")
+        print("📤 Ответ успешно отправлен пользователю!")
 
     except Exception as e:
-        print(f"❌ Ошибка в блоке Groq или отправки: {e}")
+        print(f"❌ Ошибка в блоке Groq или при отправке сообщения: {e}")
