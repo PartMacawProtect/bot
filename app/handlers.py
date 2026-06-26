@@ -1,7 +1,6 @@
 from aiogram import Router
-from aiogram.types import Message, BusinessOpeningHours, BusinessOpeningHoursInterval
+from aiogram.types import Message
 from groq import AsyncGroq
-import aiohttp
 import json
 
 from app.settings import secrets, bot
@@ -12,69 +11,31 @@ router = Router()
 client = AsyncGroq(api_key=secrets.groq_api_key)
 
 
-async def get_opening_hours_raw(business_connection_id: str):
-    """
-    Запрашивает данные бизнес-подключения напрямую через Telegram Bot API
-    и возвращает объект BusinessOpeningHours, собранный из сырого JSON-ответа.
-    """
-    url = f"https://api.telegram.org/bot{secrets.token}/getBusinessConnection"
-    print(f"🔍 Запрашиваем opening_hours для business_connection_id: {business_connection_id}")
-    
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, params={"business_connection_id": business_connection_id}) as resp:
-            data = await resp.json()
-
-    print(f"📡 Ответ от Telegram API: {json.dumps(data, indent=2, ensure_ascii=False)}")
-
-    if not data.get("ok"):
-        print(f"❌ Telegram API вернул ошибку: {data}")
-        return None
-
-    conn_data = data.get("result", {})
-    print(f"📦 conn_data ключи: {list(conn_data.keys())}")
-    
-    oh_data = conn_data.get("opening_hours")
-    if not oh_data:
-        print(f"⚠️ opening_hours не найдены в ответе. Доступные ключи: {list(conn_data.keys())}")
-        return None
-
-    print(f"✅ opening_hours найдены: {oh_data}")
-    
-    # Собираем объект BusinessOpeningHours из сырых данных
-    intervals = [
-        BusinessOpeningHoursInterval(
-            opening_minute=interval["opening_minute"],
-            closing_minute=interval["closing_minute"],
-        )
-        for interval in oh_data.get("opening_hours", [])
-    ]
-    return BusinessOpeningHours(
-        time_zone_name=oh_data["time_zone_name"],
-        opening_hours=intervals,
-    )
-
-
 @router.business_message()
 async def business_message_handler(message: Message):
+    print(f"📨 Полный объект message: {json.dumps(message.model_dump(), indent=2, default=str)}")
+    
     try:
-        # 1. Запрашиваем рабочие часы напрямую из Telegram Bot API
-        opening_hours = await get_opening_hours_raw(message.business_connection_id)
-
-        # 2. Проверяем рабочие часы
-        if opening_hours and not check_opening_hours(opening_hours):
-            print("⏱ Сейчас рабочее время. Бот молчит.")
-            return
-
-        if not opening_hours:
-            print("⚠️ Не удалось получить рабочие часы, но продолжаем отвечать на сообщение")
+        # Проверяем есть ли opening_hours в самом message
+        if hasattr(message, 'business_connection_id'):
+            print(f"✅ business_connection_id: {message.business_connection_id}")
+        
+        # Пытаемся получить opening_hours из message
+        opening_hours = getattr(message, 'opening_hours', None)
+        if opening_hours:
+            print(f"✅ opening_hours найдены в message: {opening_hours}")
+            if not check_opening_hours(opening_hours):
+                print("⏱ Сейчас рабочее время. Бот молчит.")
+                return
+        else:
+            print("⚠️ opening_hours не найдены в message, отвечаем на все сообщения")
 
     except Exception as e:
         print(f"⚠️ Ошибка при проверке рабочих часов: {e}")
         import traceback
         traceback.print_exc()
-        return
 
-    # --- ВСЁ ЧТО НИЖЕ — СРАБОТАЕТ ТОЛЬКО В НЕРАБОЧЕЕ ВРЕМЯ ---
+    # --- ОТВЕЧАЕМ НА СООБЩЕНИЕ ---
     print(f"📥 Бот поймал сообщение от @{message.from_user.username}: {message.text}")
 
     try:
