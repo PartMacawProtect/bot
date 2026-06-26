@@ -1,5 +1,5 @@
 from aiogram import Router
-from aiogram.types import Message
+from aiogram.types import Message, BusinessOpeningHours, BusinessOpeningHoursInterval
 from groq import AsyncGroq
 import aiohttp
 
@@ -9,6 +9,9 @@ from app.utils.opening_hours import check_opening_hours
 
 router = Router()
 client = AsyncGroq(api_key=secrets.groq_api_key)
+
+# ID владельца бизнес-аккаунта
+BUSINESS_OWNER_ID = 5999387348
 
 
 async def get_opening_hours_from_user(user_id: int):
@@ -27,7 +30,7 @@ async def get_opening_hours_from_user(user_id: int):
     print(f"📡 Ответ от Telegram API: {data}")
 
     if not data.get("ok"):
-        print(f"⚠️ API вернул ошибку")
+        print(f"⚠️ API вернул ошибку: {data.get('description')}")
         return None
 
     oh_data = data.get("result")
@@ -36,18 +39,37 @@ async def get_opening_hours_from_user(user_id: int):
         return None
 
     print(f"✅ opening_hours найдены: {oh_data}")
-    return oh_data
+    
+    # Преобразуем в объект BusinessOpeningHours
+    try:
+        intervals = [
+            BusinessOpeningHoursInterval(
+                opening_minute=interval["opening_minute"],
+                closing_minute=interval["closing_minute"],
+            )
+            for interval in oh_data.get("opening_hours", [])
+        ]
+        return BusinessOpeningHours(
+            time_zone_name=oh_data["time_zone_name"],
+            opening_hours=intervals,
+        )
+    except Exception as e:
+        print(f"❌ Ошибка при преобразовании opening_hours: {e}")
+        return None
 
 
 @router.business_message()
 async def business_message_handler(message: Message):
     try:
-        # Получаем часы работы пользователя
-        user_id = message.from_user.id
-        opening_hours_data = await get_opening_hours_from_user(user_id)
+        # Получаем часы работы владельца бизнес-аккаунта
+        opening_hours = await get_opening_hours_from_user(BUSINESS_OWNER_ID)
         
-        if opening_hours_data:
+        if opening_hours:
             print(f"✅ Часы работы получены успешно")
+            # Проверяем рабочие часы
+            if not check_opening_hours(opening_hours):
+                print("⏱ Сейчас рабочее время. Бот молчит.")
+                return
         else:
             print("⚠️ Не удалось получить часы работы, отвечаем на все сообщения")
 
