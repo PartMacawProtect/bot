@@ -9,7 +9,6 @@ from app.utils.opening_hours import check_opening_hours
 from app.views import system_prompt
 
 router = Router()
-# Переключаем на гораздо более умную 70B модель
 client = AsyncGroq(api_key=secrets.groq_api_key)
 
 
@@ -68,6 +67,10 @@ def format_schedule(opening_hours) -> str:
 
 @router.business_message()
 async def business_message_handler(message: Message):
+    # ПРОВЕРКА НА ВЛАДЕЛЬЦА: Если это сообщение написал ты сам, бот полностью его игнорирует
+    if message.from_user.id == secrets.admin_id:
+        return
+
     try:
         if not message.business_connection_id:
             return
@@ -109,7 +112,7 @@ async def business_message_handler(message: Message):
     try:
         print(f"🤖 Запрос в Groq API (Используем модель llama-3.3-70b)...")
         response = await client.chat.completions.create(
-            model="llama-3.3-70b-versatile",  # Обновили модель на умную
+            model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": system_prompt(schedule_text, current_day, current_time)},
                 {"role": "user", "content": message.text},
