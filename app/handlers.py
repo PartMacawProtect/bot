@@ -37,7 +37,7 @@ async def business_message_handler(message: Message):
 
     # --- ВСЁ ЧТО НИЖЕ — СРАБОТАЕТ ТОЛЬКО В НЕРАБОЧЕЕ ВРЕМЯ ---
     
-    # Оформляем имя пользователя для логов
+    # Оформляем имя пользователя для логов (если юзернейма нет, выведется ID)
     user_info = f"@{message.from_user.username}" if message.from_user.username else f"ID {message.from_user.id}"
     print(f"📥 Нерабочее время! Бот поймал сообщение от {user_info}: {message.text}")
 
@@ -53,10 +53,13 @@ async def business_message_handler(message: Message):
         answer = response.choices[0].message.content
         print(f"🎯 Ответ от Groq получен: {answer}")
 
+        # ХАК ДЛЯ MARKDOWN: экранируем подчёркивания, чтобы Telegram не превращал их в курсив и не съедал
+        safe_answer = answer.replace('_', '\\_')
+
         # Отправляем ответ в рамках того же бизнес-соединения
         await bot.send_message(
             chat_id=message.chat.id,
-            text=answer,
+            text=safe_answer,
             business_connection_id=message.business_connection_id
         )
         print("📤 Ответ успешно отправлен пользователю!")
