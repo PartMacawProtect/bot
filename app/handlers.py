@@ -1,3 +1,5 @@
+import datetime
+import pytz
 from aiogram import Router
 from aiogram.types import Message
 from groq import AsyncGroq
@@ -54,7 +56,6 @@ async def business_message_handler(message: Message):
         opening_hours = chat_info.business_opening_hours
 
         # 3. Проверяем рабочие часы.
-        # Если часы не настроены в Telegram вообще ИЛИ если check_opening_hours вернула False (сейчас рабочее время)
         if not opening_hours or not check_opening_hours(opening_hours):
             print("⏱ Сейчас рабочее время (или часы работы не настроены в ТГ). Бот молчит.")
             return  # Выходим из функции, бот ничего не отвечает
@@ -72,12 +73,25 @@ async def business_message_handler(message: Message):
     # Создаем текстовое описание графика для ИИ
     schedule_text = format_schedule(opening_hours)
 
+    # Вычисляем текущий день недели и время в часовом поясе настроек Telegram
     try:
-        print("🤖 Отправляем запрос в Groq API...")
+        tz_name = opening_hours.time_zone_name if hasattr(opening_hours, "time_zone_name") else "UTC"
+        tz = pytz.timezone(tz_name)
+    except Exception:
+        tz = pytz.utc
+
+    now = datetime.datetime.now(tz)
+    days_ru = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
+    current_day = days_ru[now.weekday()]
+    current_time = now.strftime("%H:%M")
+
+    try:
+        print(f"🤖 Отправляем запрос в Groq API (Передаем день: {current_day}, время: {current_time})...")
         response = await client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
-                {"role": "system", "content": system_prompt(schedule_text)},  # Передаем график работы в промпт
+                # Передаем график работы, текущий день и текущее время в промпт
+                {"role": "system", "content": system_prompt(schedule_text, current_day, current_time)},
                 {"role": "user", "content": message.text},
             ],
         )
