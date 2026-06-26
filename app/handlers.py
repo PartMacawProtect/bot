@@ -2,6 +2,7 @@ from aiogram import Router
 from aiogram.types import Message, BusinessOpeningHours, BusinessOpeningHoursInterval
 from groq import AsyncGroq
 import aiohttp
+import json
 
 from app.settings import secrets, bot
 from app.views import system_prompt
@@ -15,23 +16,30 @@ async def get_opening_hours_raw(business_connection_id: str):
     """
     Запрашивает данные бизнес-подключения напрямую через Telegram Bot API
     и возвращает объект BusinessOpeningHours, собранный из сырого JSON-ответа.
-    Это нужно потому, что aiogram не маппит поле opening_hours в своём враппере.
     """
     url = f"https://api.telegram.org/bot{secrets.token}/getBusinessConnection"
+    print(f"🔍 Запрашиваем opening_hours для business_connection_id: {business_connection_id}")
+    
     async with aiohttp.ClientSession() as session:
         async with session.get(url, params={"business_connection_id": business_connection_id}) as resp:
             data = await resp.json()
 
+    print(f"📡 Ответ от Telegram API: {json.dumps(data, indent=2, ensure_ascii=False)}")
+
     if not data.get("ok"):
-        print(f"⚠️ Telegram API вернул ошибку: {data}")
+        print(f"❌ Telegram API вернул ошибку: {data}")
         return None
 
-    conn_data = data["result"]
+    conn_data = data.get("result", {})
+    print(f"📦 conn_data ключи: {list(conn_data.keys())}")
+    
     oh_data = conn_data.get("opening_hours")
     if not oh_data:
-        print("⚠️ opening_hours не найдены в ответе Telegram API")
+        print(f"⚠️ opening_hours не найдены в ответе. Доступные ключи: {list(conn_data.keys())}")
         return None
 
+    print(f"✅ opening_hours найдены: {oh_data}")
+    
     # Собираем объект BusinessOpeningHours из сырых данных
     intervals = [
         BusinessOpeningHoursInterval(
@@ -62,6 +70,8 @@ async def business_message_handler(message: Message):
 
     except Exception as e:
         print(f"⚠️ Ошибка при проверке рабочих часов: {e}")
+        import traceback
+        traceback.print_exc()
         return
 
     # --- ВСЁ ЧТО НИЖЕ — СРАБОТАЕТ ТОЛЬКО В НЕРАБОЧЕЕ ВРЕМЯ ---
