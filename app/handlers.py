@@ -17,12 +17,16 @@ async def business_message_handler(message: Message):
         if not message.business_connection_id:
             return
 
-        # 1. Запрашиваем актуальную информацию о бизнес-соединении (передаем строго ID соединения)
+        # 1. Запрашиваем информацию о бизнес-соединении
         business_conn = await bot.get_business_connection(business_connection_id=message.business_connection_id)
 
-        # 2. Проверяем рабочие часы.
+        # 2. Рабочие часы привязаны к чату аккаунта. Запрашиваем полную информацию о чате владельца бизнеса.
+        chat_info = await bot.get_chat(chat_id=business_conn.user_chat_id)
+        opening_hours = chat_info.business_opening_hours
+
+        # 3. Проверяем рабочие часы.
         # Если часы не настроены в Telegram вообще ИЛИ если check_opening_hours вернула False (сейчас рабочее время)
-        if not business_conn.opening_hours or not check_opening_hours(business_conn.opening_hours):
+        if not opening_hours or not check_opening_hours(opening_hours):
             print("⏱ Сейчас рабочее время (или часы работы не настроены в ТГ). Бот молчит.")
             return  # Выходим из функции, бот ничего не отвечает
 
@@ -33,7 +37,7 @@ async def business_message_handler(message: Message):
 
     # --- ВСЁ ЧТО НИЖЕ — СРАБОТАЕТ ТОЛЬКО В НЕРАБОЧЕЕ ВРЕМЯ ---
     
-    # Красиво оформляем имя пользователя для логов, если у него нет @username
+    # Оформляем имя пользователя для логов
     user_info = f"@{message.from_user.username}" if message.from_user.username else f"ID {message.from_user.id}"
     print(f"📥 Нерабочее время! Бот поймал сообщение от {user_info}: {message.text}")
 
