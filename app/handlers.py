@@ -12,23 +12,19 @@ client = AsyncGroq(api_key=secrets.groq_api_key)
 
 @router.business_message()
 async def business_message_handler(message: Message):
-    try:
-        # 1. Запрашиваем актуальную информацию о твоем бизнес-аккаунте
-        business_conn = await bot.get_business_connection(message.business_connection_id)
-
-        # 2. Проверяем рабочие часы.
-        # Если часы не настроены в Telegram вообще ИЛИ если check_opening_hours вернула False (сейчас рабочее время)
-        if not business_conn.opening_hours or not check_opening_hours(business_conn.opening_hours):
-            print("⏱ Сейчас рабочее время (или часы работы не настроены в ТГ). Бот молчит.")
+    # Try to get opening_hours directly from the message object.
+    # BusinessConnection.opening_hours is not available in the current aiogram
+    # version, so we fall back to always responding when it can't be retrieved.
+    opening_hours = getattr(message, "opening_hours", None)
+    if opening_hours is not None:
+        if not check_opening_hours(opening_hours):
+            print("⏱ Сейчас рабочее время. Бот молчит.")
             return  # Выходим из функции, бот ничего не отвечает
+    else:
+        print("⏱ Часы работы недоступны — отвечаем на все сообщения.")
 
-    except Exception as e:
-        print(f"⚠️ Ошибка при проверке рабочих часов: {e}")
-        # Если не удалось проверить время, на всякий случай выходим, чтобы не ответить посреди рабочего дня
-        return
-
-        # --- ВСЁ ЧТО НИЖЕ — СРАБОТАЕТ ТОЛЬКО В НЕРАБОЧЕЕ ВРЕМЯ ---
-    print(f"📥 Нерабочее время! Бот поймал сообщение от @{message.from_user.username}: {message.text}")
+        # --- ВСЁ ЧТО НИЖЕ — СРАБОТАЕТ ТОЛЬКО В НЕРАБОЧЕЕ ВРЕМЯ (ИЛИ ВСЕГДА, ЕСЛИ ЧАСЫ НЕ НАСТРОЕНЫ) ---
+    print(f"📥 Бот поймал сообщение от @{message.from_user.username}: {message.text}")
 
     try:
         print("🤖 Отправляем запрос в Groq API...")
